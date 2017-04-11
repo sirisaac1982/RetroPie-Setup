@@ -17,8 +17,6 @@ rp_module_section="main"
 
 function sources_lr-mame2003() {
     gitPullOrClone "$md_build" https://github.com/libretro/mame2003-libretro.git
-    # quieter build
-    sed -i "s/-Wcast-align//" Makefile
 }
 
 function build_lr-mame2003() {
@@ -59,8 +57,8 @@ function configure_lr-mame2003() {
     mkUserDir "$biosdir/mame2003/samples"
 
     # copy hiscore.dat
-    cp "$md_inst/metadata/hiscore.dat" "$biosdir/mame2003/"
-    chown $user:$user "$biosdir/mame2003/hiscore.dat"
+    cp "$md_inst/metadata/"{hiscore.dat,cheat.dat} "$biosdir/mame2003/"
+    chown $user:$user "$biosdir/mame2003/"{hiscore.dat,cheat.dat}
 
     # Set core options
     setRetroArchCoreOption "mame2003-skip_disclaimer" "enabled"
