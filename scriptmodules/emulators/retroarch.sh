@@ -33,15 +33,9 @@ function depends_retroarch() {
 }
 
 function sources_retroarch() {
-    gitPullOrClone "$md_build" https://github.com/libretro/RetroArch.git v1.5.0
+    gitPullOrClone "$md_build" https://github.com/libretro/RetroArch.git v1.6.7
     applyPatch "$md_data/01_hotkey_hack.diff"
     applyPatch "$md_data/02_disable_search.diff"
-    if isPlatform "rpi"; then
-        applyPatch "$md_data/03_dispmanx.diff"
-    fi
-    if isPlatform "mali"; then
-        applyPatch "$md_data/04_mali_struct.diff"
-    fi
 }
 
 function build_retroarch() {
@@ -92,6 +86,14 @@ function update_assets_retroarch() {
     chown -R $user:$user "$dir"
 }
 
+function install_xmb_monochrome_assets_retroarch() {
+    local dir="$configdir/all/retroarch/assets"
+    [[ -d "$dir/.git" ]] && return
+    [[ ! -d "$dir" ]] && mkUserDir "$dir"
+    downloadAndExtract "$__archive_url/retroarch-xmb-monochrome.tar.gz" "$dir"
+    chown -R $user:$user "$dir"
+}
+
 function configure_retroarch() {
     [[ "$md_mode" == "remove" ]] && return
 
@@ -110,9 +112,16 @@ function configure_retroarch() {
     # install shaders by default
     update_shaders_retroarch
 
+    # install minimal assets
+    install_xmb_monochrome_assets_retroarch
+
     local config="$(mktemp)"
 
     cp "$md_inst/retroarch.cfg" "$config"
+
+    # query ES A/B key swap configuration
+    local es_swap="false"
+    getAutoConf "es_swap_a_b" && es_swap="true"
 
     # configure default options
     iniConfig " = " '"' "$config"
@@ -171,6 +180,22 @@ function configure_retroarch() {
 
     # rgui by default
     iniSet "menu_driver" "rgui"
+
+    # hide online updater menu options
+    iniSet "menu_show_core_updater" "false"
+    iniSet "menu_show_online_updater" "false"
+
+    # disable unnecessary xmb menu tabs
+    iniSet "xmb_show_add" "false"
+    iniSet "xmb_show_history" "false"
+    iniSet "xmb_show_images" "false"
+    iniSet "xmb_show_music" "false"
+
+    # disable xmb menu driver icon shadows
+    iniSet "xmb_shadows_enable" "false"
+
+    # swap A/B buttons based on ES configuration
+    iniSet "menu_swap_ok_cancel_buttons" "$es_swap"
 
     copyDefaultConfig "$config" "$configdir/all/retroarch.cfg"
     rm "$config"
@@ -283,6 +308,7 @@ function gui_retroarch() {
                         ;;
                     2)
                         rm -rf "$configdir/all/retroarch/$dir"
+                        [[ "$dir" == "assets" ]] && install_xmb_monochrome_assets_retroarch
                         ;;
                     *)
                         continue

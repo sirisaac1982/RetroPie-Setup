@@ -35,9 +35,9 @@ function setup_env() {
 
     # set location of binary downloads
     __binary_host="files.retropie.org.uk"
-    [[ "$__has_binaries" -eq 1 ]] && __binary_url="http://$__binary_host/binaries/$__os_codename/$__platform"
+    [[ "$__has_binaries" -eq 1 ]] && __binary_url="https://$__binary_host/binaries/$__os_codename/$__platform"
 
-    __archive_url="http://files.retropie.org.uk/archives"
+    __archive_url="https://files.retropie.org.uk/archives"
 
     # -pipe is faster but will use more memory - so let's only add it if we have more thans 256M free ram.
     [[ $__memory_phys -ge 512 ]] && __default_cflags+=" -pipe"
@@ -95,8 +95,8 @@ function get_os_version() {
                 __default_cxxflags+=" -U__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2"
             fi
 
-            # we provide binaries for RPI only
-            if isPlatform "rpi"; then
+            # we provide binaries for RPI on Raspbian < 9 only
+            if isPlatform "rpi" && compareVersions "$__os_release" lt 9; then
                 __has_binaries=1
             fi
 
@@ -198,7 +198,7 @@ function get_retropie_depends() {
         echo "deb http://archive.raspberrypi.org/debian/ $__os_codename main" >>$config
     fi
 
-    local depends=(git dialog wget gcc g++ build-essential unzip xmlstarlet)
+    local depends=(git dialog wget gcc g++ build-essential unzip xmlstarlet python-pyudev)
     if [[ -n "$__default_gcc_version" ]]; then
         depends+=(gcc-$__default_gcc_version g++-$__default_gcc_version)
     fi

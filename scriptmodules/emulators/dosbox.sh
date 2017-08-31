@@ -21,7 +21,7 @@ function depends_dosbox() {
 }
 
 function sources_dosbox() {
-    wget -O- -q $__archive_url/dosbox-r3876.tar.gz | tar -xvz --strip-components=1
+    downloadAndExtract "$__archive_url/dosbox-r3876.tar.gz" "$md_build" 1
 }
 
 function build_dosbox() {
@@ -83,4 +83,3 @@ _EOF_
     addEmulator 1 "$md_id" "pc" "bash $romdir/pc/+Start\ DOSBox.sh %ROM%"
     addSystem "pc"
 }
-

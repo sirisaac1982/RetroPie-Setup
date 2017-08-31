@@ -115,7 +115,7 @@ function addLineToFile() {
     if [[ -f "$2" ]]; then
         cp -p "$2" "$2.bak"
     else
-        sed -i -e '$a\' "$2"
+        sed -i --follow-symlinks '$a\' "$2"
     fi
 
     echo "$1" >> "$2"
@@ -193,6 +193,14 @@ function getDepends() {
     local required
     local packages=()
     local failed=()
+
+    # check whether to use our own sdl2 - can be disabled to resolve issues with
+    # mixing custom 64bit sdl2 and os distributed i386 version on multiarch
+    local own_sdl2=1
+    iniConfig " = " '"' "$configdir/all/retropie.cfg"
+    iniGet "own_sdl2"
+    [[ "$ini_value" == "0" ]] && own_sdl2=0
+
     for required in $@; do
         if [[ "$md_mode" == "install" ]]; then
             # make sure we have our sdl1 / sdl2 installed
@@ -200,7 +208,7 @@ function getDepends() {
                 packages+=("$required")
                 continue
             fi
-            if [[ "$required" == "libsdl2-dev" ]] && ! hasPackage libsdl2-dev $(get_pkg_ver_sdl2) "eq"; then
+            if [[ "$own_sdl2" -eq 1 && "$required" == "libsdl2-dev" ]] && ! hasPackage libsdl2-dev $(get_pkg_ver_sdl2) "eq"; then
                 packages+=("$required")
                 continue
             fi
@@ -240,7 +248,7 @@ function getDepends() {
                 else
                     rp_callModule sdl1
                 fi
-            elif [[ "$required" == "libsdl2-dev" ]]; then
+            elif [[ "$required" == "libsdl2-dev" && "$own_sdl2" == "1" ]]; then
                 if [[ "$__has_binaries" -eq 1 ]]; then
                     rp_callModule sdl2 install_bin
                 else
@@ -519,11 +527,11 @@ function renameModule() {
         rm -rf "$rootdir/$md_type/$to"
         mv "$rootdir/$md_type/$from" "$rootdir/$md_type/$to"
         # replace any default = "$from"
-        sed -i "s/\"$from\"/\"$to\"/g" "$configdir"/*/emulators.cfg
+        sed -i --follow-symlinks "s/\"$from\"/\"$to\"/g" "$configdir"/*/emulators.cfg
         # replace any $from = "cmdline"
-        sed -i "s/^$from\([ =]\)/$to\1/g" "$configdir"/*/emulators.cfg
+        sed -i --follow-symlinks "s/^$from\([ =]\)/$to\1/g" "$configdir"/*/emulators.cfg
         # replace any paths with /$from/
-        sed -i "s|/$from/|/$to/|g" "$configdir"/*/emulators.cfg
+        sed -i --follow-symlinks "s|/$from/|/$to/|g" "$configdir"/*/emulators.cfg
     fi
 }
 
@@ -899,6 +907,56 @@ function applyPatch() {
     return 0
 }
 
+## @fn downloadAndExtract()
+## @param url url of archive
+## @param dest destination folder for the archive
+## @param opts number of leading components from file to strip off or unzip params
+## @brief Download and extract an archive
+## @details Download and extract an archive, optionally stripping off a number
+## of directories - equivalent to the tar `--strip-components parameter`. For
+## zip files, the strip parameter can contain additional options to send to unzip
+## @retval 0 on success
+function downloadAndExtract() {
+    local url="$1"
+    local dest="$2"
+    local opts="$3"
+
+    local ext="${url##*.}"
+    local cmd=(tar -xv)
+    local is_tar=1
+
+    local ret
+    case "$ext" in
+        gz|tgz)
+            cmd+=(-z)
+            ;;
+        bz2)
+            cmd+=(-j)
+            ;;
+        xz)
+            cmd+=(-J)
+            ;;
+        zip)
+            is_tar=0
+            local tmp="$(mktemp -d)"
+            local file="${url##*/}"
+            runCmd wget -q -O"$tmp/$file" "$url"
+            runCmd unzip $opts -o "$tmp/$file" -d "$dest"
+            rm -rf "$tmp"
+            ret=$?
+    esac
+
+    if [[ "$is_tar" -eq 1 ]]; then
+        cmd+=(-C "$dest")
+        [[ -n "$opts" ]] && cmd+=(--strip-components "$opts")
+
+        runCmd "${cmd[@]}" < <(wget -q -O- "$url")
+        ret=$?
+    fi
+
+    return $ret
+}
+
 ## @fn ensureFBMode()
 ## @param res_x width of mode
 ## @param res_y height of mode
@@ -912,7 +970,7 @@ function ensureFBMode() {
     local res_x="$1"
     local res_y="$2"
     local res="${res_x}x${res_y}"
-    sed -i "/$res mode/,/endmode/d" /etc/fb.modes
+    sed -i --follow-symlinks "/$res mode/,/endmode/d" /etc/fb.modes
 
     cat >> /etc/fb.modes <<_EOF_
 # added by RetroPie-Setup - $res mode for emulators
@@ -947,7 +1005,7 @@ function joy2keyStart() {
     # if no joystick device, or joy2key is already running exit
     [[ -z "$__joy2key_dev" || -n "$SSH_TTY" ]] || pgrep -f joy2key.py >/dev/null && return 1
 
-    # if joy2key.py is installed run it with cursor keys for axis, and enter + space for buttons 0 and 1
+    # if joy2key.py is installed run it with cursor keys for axis/dpad, and enter + space for buttons 0 and 1
     if "$scriptdir/scriptmodules/supplementary/runcommand/joy2key.py" "$__joy2key_dev" "${params[@]}" & 2>/dev/null; then
         __joy2key_pid=$!
         return 0
